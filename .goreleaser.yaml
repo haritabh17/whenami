@@ -1,0 +1,43 @@
+version: 2
+
+project_name: theirtime
+
+before:
+  hooks:
+    - go mod tidy
+    - go test ./...
+
+builds:
+  - id: theirtime
+    main: ./cmd/theirtime
+    binary: theirtime
+    env:
+      - CGO_ENABLED=1
+    goos:
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X github.com/haritabh17/theirtime/internal/buildinfo.Version={{.Version}}
+      - -X github.com/haritabh17/theirtime/internal/buildinfo.Commit={{.Commit}}
+      - -X github.com/haritabh17/theirtime/internal/buildinfo.Date={{.Date}}
+
+universal_binaries:
+  - id: theirtime
+    replace: true
+
+archives:
+  - formats: [tar.gz]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_darwin_{{ .Arch }}"
+
+checksum:
+  name_template: "checksums.txt"
+
+release:
+  github:
+    owner: haritabh17
+    name: theirtime
+  draft: false
+  prerelease: auto
