@@ -12,6 +12,7 @@ import (
 
 	"github.com/haritabh17/theirtime/internal/openurl"
 	"github.com/haritabh17/theirtime/internal/slack"
+	"github.com/haritabh17/theirtime/internal/ui"
 )
 
 const (
@@ -66,7 +67,31 @@ func Authenticate(clientID, clientSecret string) (*Result, error) {
 			return
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		_, _ = w.Write([]byte(`<!DOCTYPE html><html><body><p>theirtime connected. You can close this tab and return to the terminal.</p></body></html>`))
+		_, _ = w.Write([]byte(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>theirtime connected</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+           display: flex; align-items: center; justify-content: center; min-height: 100vh;
+           margin: 0; background: #0f0f10; color: #f5f5f7; }
+    .card { text-align: center; padding: 2.5rem 3rem; border-radius: 16px;
+            background: #1c1c1e; border: 1px solid #3a3a3c; max-width: 420px; }
+    h1 { font-size: 1.5rem; font-weight: 600; margin: 0 0 0.5rem; }
+    p { color: #98989d; margin: 0; line-height: 1.5; }
+    .mark { color: #30d158; font-size: 2rem; margin-bottom: 1rem; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="mark">✓</div>
+    <h1>theirtime connected</h1>
+    <p>Return to your terminal to finish setup.</p>
+  </div>
+</body>
+</html>`))
 		codeCh <- code
 	})
 
@@ -81,7 +106,7 @@ func Authenticate(clientID, clientSecret string) (*Result, error) {
 
 	authURL := authorizeURL(clientID, state)
 	if err := openurl.Open(authURL); err != nil {
-		fmt.Printf("Open this URL in your browser:\n%s\n", authURL)
+		ui.URL("Could not open browser. Open this URL manually:", authURL)
 	}
 
 	var code string

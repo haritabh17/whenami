@@ -10,6 +10,7 @@ import (
 	"github.com/haritabh17/theirtime/internal/manifest"
 	"github.com/haritabh17/theirtime/internal/openurl"
 	"github.com/haritabh17/theirtime/internal/slackcfg"
+	"github.com/haritabh17/theirtime/internal/ui"
 	"golang.org/x/term"
 )
 
@@ -18,29 +19,23 @@ func EnsureAppCredentials() (clientID, clientSecret string, err error) {
 		return id, secret, nil
 	}
 
-	fmt.Println()
-	fmt.Println("Step 1 of 2 — Create your personal Slack app")
-	fmt.Println("────────────────────────────────────────────")
-	fmt.Println("theirtime uses a Slack app that you create and control.")
-	fmt.Println("Opening Slack with a pre-filled app manifest…")
-	fmt.Println()
+	ui.Step(1, 2, "Create your Slack app")
+	ui.Muted("You create and own the app. Credentials stay in your Keychain.")
+	ui.Blank()
+	ui.Action("Opening Slack with a pre-filled manifest…")
+	ui.Blank()
 
 	createURL := manifest.CreateAppURL()
 	if err := openurl.Open(createURL); err != nil {
-		fmt.Printf("Could not open browser. Open this URL manually:\n%s\n\n", createURL)
+		ui.URL("Could not open browser. Open this URL manually:", createURL)
+		ui.Blank()
 	}
 
-	fmt.Println("In the browser:")
-	fmt.Println("  1. Sign in to Slack (if asked)")
-	fmt.Println("  2. Pick a workspace and click Next")
-	fmt.Println("  3. Review the manifest and click Create")
-	fmt.Println("  4.", manifest.BasicInfoHint)
-	fmt.Println("  5. Copy Client ID and Client Secret")
-	fmt.Println()
+	ui.BrowserSteps(manifest.BasicInfoHint)
 
 	reader := bufio.NewReader(os.Stdin)
 
-	fmt.Print("Paste Client ID: ")
+	ui.Prompt("Client ID")
 	clientID, err = readLine(reader)
 	if err != nil {
 		return "", "", err
@@ -50,9 +45,9 @@ func EnsureAppCredentials() (clientID, clientSecret string, err error) {
 		return "", "", fmt.Errorf("Client ID is required")
 	}
 
-	fmt.Print("Paste Client Secret (input hidden): ")
+	ui.Prompt("Client Secret")
 	secretBytes, err := term.ReadPassword(int(os.Stdin.Fd()))
-	fmt.Println()
+	ui.Blank()
 	if err != nil {
 		return "", "", fmt.Errorf("read Client Secret: %w", err)
 	}
@@ -65,8 +60,8 @@ func EnsureAppCredentials() (clientID, clientSecret string, err error) {
 		return "", "", fmt.Errorf("save app credentials to Keychain: %w", err)
 	}
 
-	fmt.Println("App credentials saved to Keychain.")
-	fmt.Println()
+	ui.Success("App credentials saved to Keychain")
+	ui.Blank()
 	return clientID, clientSecret, nil
 }
 

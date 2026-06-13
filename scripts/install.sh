@@ -6,6 +6,8 @@ REPO="${THEIRTIME_REPO:-haritabh17/theirtime}"
 INSTALL_DIR="${INSTALL_DIR:-/usr/local/bin}"
 VERSION="${THEIRTIME_VERSION:-latest}"
 
+log() { echo "$@" >&2; }
+
 if [[ "$(uname -s)" != "Darwin" ]]; then
   echo "theirtime is macOS-only (detected: $(uname -s))" >&2
   exit 1
@@ -27,7 +29,7 @@ else
   release_url="${api_base}/tags/${VERSION}"
 fi
 
-echo "Fetching release metadata…"
+log "Fetching release metadata…"
 release_json="$(curl -fsSL "$release_url")"
 
 read -r tarball_url checksums_url <<<"$(RELEASE_JSON="$release_json" python3 - <<'PY'
@@ -59,15 +61,15 @@ tarball_name="$(basename "$tarball_url")"
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
-echo "Downloading checksums…"
+log "Downloading checksums…"
 curl -fsSL "$checksums_url" -o "$tmp/checksums.txt"
 
-echo "Downloading theirtime (universal macOS binary)…"
+log "Downloading theirtime (universal macOS binary)…"
 curl -fsSL "$tarball_url" -o "$tmp/$tarball_name"
 
 (
   cd "$tmp"
-  grep -F "$tarball_name" checksums.txt | shasum -a 256 -c -
+  grep -F "$tarball_name" checksums.txt | shasum -a 256 -c - >&2
 )
 
 tar -xzf "$tmp/$tarball_name" -C "$tmp"
@@ -86,9 +88,14 @@ fi
 if [[ -w "$INSTALL_DIR" ]]; then
   install -m 755 "$bin" "$INSTALL_DIR/theirtime"
 else
-  echo "Installing to $INSTALL_DIR (may prompt for password)…"
+  log "Installing to $INSTALL_DIR (may prompt for password)…"
   sudo install -m 755 "$bin" "$INSTALL_DIR/theirtime"
 fi
 
-echo "Installed: $($INSTALL_DIR/theirtime version)"
-echo "Next: theirtime onboard"
+version_line="$("$INSTALL_DIR/theirtime" version)"
+echo ""
+echo "  ✓ ${version_line} → ${INSTALL_DIR}/theirtime"
+echo ""
+echo "  Next:"
+echo "    theirtime onboard"
+echo ""

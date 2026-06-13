@@ -7,22 +7,41 @@ import (
 	"github.com/haritabh17/theirtime/internal/config"
 	"github.com/haritabh17/theirtime/internal/keychain"
 	"github.com/haritabh17/theirtime/internal/onboard"
+	"github.com/haritabh17/theirtime/internal/ui"
 	"github.com/spf13/cobra"
+)
+
+var (
+	onboardQuiet   bool
+	onboardVerbose bool
 )
 
 var onboardCmd = &cobra.Command{
 	Use:   "onboard",
 	Short: "Create your Slack app, authorize, and get ready to watch teammates",
 	RunE: func(cmd *cobra.Command, args []string) error {
+		ui.Default.Quiet = onboardQuiet
+		ui.Default.Verbose = onboardVerbose
+
+		ui.SetupIntro()
+
+		hadCreds := keychain.HasAppCredentials()
 		clientID, clientSecret, err := onboard.EnsureAppCredentials()
 		if err != nil {
 			return err
 		}
+		if hadCreds {
+			ui.Success("Slack app credentials found — skipping app creation")
+			ui.Blank()
+		}
+		_ = clientID
+		_ = clientSecret
 
-		fmt.Println("Step 2 of 2 — Authorize theirtime")
-		fmt.Println("─────────────────────────────────")
-		fmt.Println("Opening Slack authorization in your browser…")
+		ui.Step(2, 2, "Authorize")
+		ui.Action("Opening Slack in your browser…")
+		stop := ui.Spinner("Waiting for sign-in…")
 		result, err := auth.Authenticate(clientID, clientSecret)
+		stop()
 		if err != nil {
 			return err
 		}
@@ -44,10 +63,13 @@ var onboardCmd = &cobra.Command{
 			return err
 		}
 
-		fmt.Println("Connected to Slack.")
-		fmt.Println("Add teammates: theirtime team add <label> <U…>")
-		fmt.Println("Then run: theirtime install-agents")
-		fmt.Println("Run `theirtime status` to check state.")
+		ui.Success("Connected to Slack")
+		ui.DoneCard()
 		return nil
 	},
+}
+
+func init() {
+	onboardCmd.Flags().BoolVar(&onboardQuiet, "quiet", false, "Minimal output (errors only)")
+	onboardCmd.Flags().BoolVar(&onboardVerbose, "verbose", false, "Show detailed browser instructions")
 }
