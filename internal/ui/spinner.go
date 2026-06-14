@@ -35,9 +35,25 @@ func Spinner(label string) func() {
 		}
 	}()
 
+	var once sync.Once
 	return func() {
-		close(done)
-		wg.Wait()
-		fmt.Fprint(errOut, "\r\033[K")
+		once.Do(func() {
+			close(done)
+			wg.Wait()
+			fmt.Fprint(errOut, "\r\033[K")
+		})
 	}
+}
+
+// ProgressSpinner returns update/done funcs for changing the spinner label mid-operation.
+func ProgressSpinner(initial string) (update func(string), done func()) {
+	stop := Spinner(initial)
+	var once sync.Once
+	finish := func() {
+		once.Do(func() { stop() })
+	}
+	return func(label string) {
+		stop()
+		stop = Spinner(label)
+	}, finish
 }

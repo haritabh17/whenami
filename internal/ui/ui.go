@@ -100,6 +100,16 @@ func Step(n, total int, title string) {
 	Blank()
 }
 
+// Heading prints a titled box (no step number).
+func Heading(title string) {
+	if Default.Quiet {
+		return
+	}
+	Blank()
+	fmt.Fprintln(out, boxStyle.Render(render(titleStyle, title)))
+	Blank()
+}
+
 // SetupIntro prints the onboarding welcome once.
 func SetupIntro() {
 	if Default.Quiet {
@@ -135,6 +145,42 @@ func Command(name string, args ...string) {
 		cmd += " " + strings.Join(args, " ")
 	}
 	fmt.Fprintln(out, "    "+render(cmdStyle, cmd))
+}
+
+// InstallAgentsDone prints success after the menu bar LaunchAgent is running.
+func InstallAgentsDone(teammateCount int) {
+	if Default.Quiet {
+		return
+	}
+	Blank()
+	var b strings.Builder
+	b.WriteString(render(titleStyle, "Menu bar agent running"))
+	b.WriteString("\n\n")
+	b.WriteString("  " + render(successStyle, "✓") + " " + render(mutedStyle, "dev.theirtime.menubar started") + "\n")
+	b.WriteString("  " + render(mutedStyle, fmt.Sprintf("Watching %d teammate(s)", teammateCount)) + "\n\n")
+	b.WriteString("  " + render(mutedStyle, "Look for avatars in your menu bar — may take a few seconds.") + "\n\n")
+	b.WriteString("  " + render(mutedStyle, "Logs:") + "\n")
+	b.WriteString("    " + render(cmdStyle, "~/Library/Logs/theirtime/menubar.log"))
+	fmt.Fprintln(out, doneBoxStyle.Render(b.String()))
+	Blank()
+}
+
+// InstallAgentsEmpty prints guidance when no teammates are configured.
+func InstallAgentsEmpty() {
+	if Default.Quiet {
+		return
+	}
+	Blank()
+	var b strings.Builder
+	b.WriteString(render(titleStyle, "No teammates yet"))
+	b.WriteString("\n\n")
+	b.WriteString("  " + render(mutedStyle, "The menu bar agent starts once you add someone to watch.") + "\n\n")
+	b.WriteString("  Add a teammate:\n")
+	b.WriteString("    " + render(cmdStyle, "theirtime team add bob U012ABCDEF") + "\n\n")
+	b.WriteString("  Then run:\n")
+	b.WriteString("    " + render(cmdStyle, "theirtime install-agents"))
+	fmt.Fprintln(out, doneBoxStyle.Render(b.String()))
+	Blank()
 }
 
 // DoneCard prints the post-onboard success card with next steps.

@@ -1,31 +1,48 @@
 package cmd
 
 import (
-	"fmt"
-
 	"github.com/haritabh17/theirtime/internal/config"
 	"github.com/haritabh17/theirtime/internal/launchagent"
+	"github.com/haritabh17/theirtime/internal/ui"
 	"github.com/spf13/cobra"
 )
+
+var installAgentsQuiet bool
 
 var installAgentsCmd = &cobra.Command{
 	Use:   "install-agents",
 	Short: "Install or refresh the menu bar LaunchAgent",
 	RunE: func(cmd *cobra.Command, args []string) error {
+		ui.Default.Quiet = installAgentsQuiet
+
+		cfg, err := config.Load()
+		if err != nil {
+			return err
+		}
+
+		ui.Heading("Install menu bar agent")
+
 		bin, err := launchagent.CurrentBinary()
 		if err != nil {
 			return err
 		}
-		if err := launchagent.Install(bin); err != nil {
+
+		update, done := ui.ProgressSpinner("Installing menu bar agent…")
+		err = launchagent.Install(bin, update)
+		done()
+		if err != nil {
 			return err
 		}
-		cfg, _ := config.Load()
+
 		if len(cfg.Team) > 0 {
-			fmt.Println("Menu bar LaunchAgent installed.")
+			ui.InstallAgentsDone(len(cfg.Team))
 		} else {
-			fmt.Println("No teammates configured — menu bar agent not started.")
-			fmt.Println("Add teammates with theirtime team add …, then run install-agents again.")
+			ui.InstallAgentsEmpty()
 		}
 		return nil
 	},
+}
+
+func init() {
+	installAgentsCmd.Flags().BoolVar(&installAgentsQuiet, "quiet", false, "Minimal output (errors only)")
 }

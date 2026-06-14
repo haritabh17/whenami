@@ -37,25 +37,43 @@ func logDir() (string, error) {
 	return dir, nil
 }
 
-func Install(binaryPath string) error {
+func Install(binaryPath string, onStep func(string)) error {
+	report := func(msg string) {
+		if onStep != nil {
+			onStep(msg)
+		}
+	}
+
 	cfg, err := config.Load()
 	if err != nil {
 		return err
 	}
+	report("Removing legacy LaunchAgents…")
 	if err := removeLegacyAgents(); err != nil {
 		return err
 	}
 	if len(cfg.Team) == 0 {
+		report("Stopping menu bar agent…")
 		return uninstallMenubarAgent()
 	}
+	report("Preparing log directory…")
 	logs, err := logDir()
 	if err != nil {
 		return err
 	}
-	return installMenubarAgent(binaryPath, logs)
+	report("Writing LaunchAgent plist…")
+	if err := writeMenubarPlist(binaryPath, logs); err != nil {
+		return err
+	}
+	report("Starting menu bar agent…")
+	menubarPath, err := menubarPlistPath()
+	if err != nil {
+		return err
+	}
+	return loadAgent(menubarPath, menubarLabel)
 }
 
-func installMenubarAgent(binaryPath, logs string) error {
+func writeMenubarPlist(binaryPath, logs string) error {
 	menubarPath, err := menubarPlistPath()
 	if err != nil {
 		return err
@@ -88,7 +106,15 @@ func installMenubarAgent(binaryPath, logs string) error {
 	if err := os.MkdirAll(filepath.Dir(menubarPath), 0o755); err != nil {
 		return err
 	}
-	if err := os.WriteFile(menubarPath, []byte(menubarPlist), 0o644); err != nil {
+	return os.WriteFile(menubarPath, []byte(menubarPlist), 0o644)
+}
+
+func installMenubarAgent(binaryPath, logs string) error {
+	if err := writeMenubarPlist(binaryPath, logs); err != nil {
+		return err
+	}
+	menubarPath, err := menubarPlistPath()
+	if err != nil {
 		return err
 	}
 	return loadAgent(menubarPath, menubarLabel)
