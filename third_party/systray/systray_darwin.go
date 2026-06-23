@@ -15,8 +15,9 @@ import (
 
 // StatusSegment is one inline avatar + text chunk for the menu bar title.
 type StatusSegment struct {
-	Text  string
-	Image []byte
+	Text       string
+	Image      []byte
+	AvatarSize int // side length of avatar square before badge padding; 0 = scale entire image
 }
 
 // SetStatusSegments renders avatar images inline with text in the menu bar title.
@@ -61,6 +62,9 @@ func SetStatusSegments(segments []StatusSegment) {
 			csegs[i].image_bytes = (*C.char)(p)
 			csegs[i].image_len = C.int(len(s.Image))
 		}
+		if s.AvatarSize > 0 {
+			csegs[i].avatar_size = C.int(s.AvatarSize)
+		}
 	}
 
 	C.setStatusSegments((*C.status_segment_t)(base), C.int(n))
@@ -76,10 +80,15 @@ func SetTemplateIcon(templateIconBytes []byte, regularIconBytes []byte) {
 }
 
 // SetIcon sets the icon of a menu item. Only works on macOS and Windows.
-// iconBytes should be the content of .ico/.jpg/.png
-func (item *MenuItem) SetIcon(iconBytes []byte) {
+// iconBytes should be the content of .ico/.jpg/.png.
+// avatarContentPx is the side length of the avatar square before badge padding;
+// pass 0 to scale the entire image into the icon slot.
+func (item *MenuItem) SetIcon(iconBytes []byte, avatarContentPx int) {
+	if len(iconBytes) == 0 {
+		return
+	}
 	cstr := (*C.char)(unsafe.Pointer(&iconBytes[0]))
-	C.setMenuItemIcon(cstr, (C.int)(len(iconBytes)), C.int(item.id), false)
+	C.setMenuItemIcon(cstr, (C.int)(len(iconBytes)), C.int(item.id), false, C.int(avatarContentPx))
 }
 
 // SetTemplateIcon sets the icon of a menu item as a template icon (on macOS). On Windows, it
@@ -88,5 +97,5 @@ func (item *MenuItem) SetIcon(iconBytes []byte) {
 // .ico/.jpg/.png for other platforms.
 func (item *MenuItem) SetTemplateIcon(templateIconBytes []byte, regularIconBytes []byte) {
 	cstr := (*C.char)(unsafe.Pointer(&templateIconBytes[0]))
-	C.setMenuItemIcon(cstr, (C.int)(len(templateIconBytes)), C.int(item.id), true)
+	C.setMenuItemIcon(cstr, (C.int)(len(templateIconBytes)), C.int(item.id), true, 0)
 }

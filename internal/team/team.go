@@ -2,6 +2,7 @@ package team
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -22,6 +23,11 @@ type MemberTime struct {
 	DisplayName string
 	Time        string
 	AvatarURL   string
+}
+
+// MemberTimeGroup is a display group of teammates sharing one UTC offset.
+type MemberTimeGroup struct {
+	Members []MemberTime
 }
 
 // InfoClient fetches Slack user profile fields.
@@ -58,13 +64,107 @@ func ListWithTimes(client InfoClient, cfg *config.Config, at time.Time) ([]Membe
 
 // FormatMenubarTitle builds the compact menu bar string (text-only fallback).
 func FormatMenubarTitle(cfg *config.Config, members []MemberTime) string {
-	return truncateMenubarTitle(joinMemberDisplays(cfg, members, " | "))
+	return FormatMenubarTitleAt(cfg, members, time.Now())
 }
 
-func joinMemberDisplays(cfg *config.Config, members []MemberTime, sep string) string {
-	parts := make([]string, 0, len(members))
+// FormatMenubarTitleAt builds the compact menu bar string for a specific instant.
+func FormatMenubarTitleAt(cfg *config.Config, members []MemberTime, at time.Time) string {
+	return truncateMenubarTitle(joinMemberGroupDisplays(cfg, GroupMemberTimesAt(members, at), " | "))
+}
+
+// GroupMemberTimes groups teammates by current UTC offset while preserving configured order.
+func GroupMemberTimes(members []MemberTime) []MemberTimeGroup {
+	return GroupMemberTimesAt(members, time.Now())
+}
+
+// SortMemberTimesByUTCOffset orders members by their current UTC offset.
+func SortMemberTimesByUTCOffset(members []MemberTime) []MemberTime {
+	return SortMemberTimesByUTCOffsetAt(members, time.Now())
+}
+
+// SortMemberTimesByUTCOffsetAt orders members by UTC offset at a specific instant.
+func SortMemberTimesByUTCOffsetAt(members []MemberTime, at time.Time) []MemberTime {
+	return FlattenMemberTimeGroups(GroupMemberTimesAt(members, at))
+}
+
+// GroupMemberTimesAt groups teammates by UTC offset at a specific instant.
+func GroupMemberTimesAt(members []MemberTime, at time.Time) []MemberTimeGroup {
+	type offsetGroup struct {
+		group MemberTimeGroup
+		valid bool
+		value int
+		order int
+	}
+
+	groups := make([]offsetGroup, 0, len(members))
+	byOffset := make(map[int]int)
 	for _, m := range members {
-		text := FormatMemberDisplay(cfg, m, "")
+		offset, ok := memberUTCOffset(m, at)
+		if !ok {
+			groups = append(groups, offsetGroup{
+				group: MemberTimeGroup{Members: []MemberTime{m}},
+				order: len(groups),
+			})
+			continue
+		}
+		if idx, ok := byOffset[offset]; ok {
+			groups[idx].group.Members = append(groups[idx].group.Members, m)
+			continue
+		}
+		byOffset[offset] = len(groups)
+		groups = append(groups, offsetGroup{
+			group: MemberTimeGroup{Members: []MemberTime{m}},
+			valid: true,
+			value: offset,
+			order: len(groups),
+		})
+	}
+	sort.SliceStable(groups, func(i, j int) bool {
+		if groups[i].valid != groups[j].valid {
+			return groups[i].valid
+		}
+		if groups[i].valid && groups[i].value != groups[j].value {
+			return groups[i].value < groups[j].value
+		}
+		return groups[i].order < groups[j].order
+	})
+
+	out := make([]MemberTimeGroup, 0, len(groups))
+	for _, g := range groups {
+		out = append(out, g.group)
+	}
+	return out
+}
+
+// FlattenMemberTimeGroups returns group members in their rendered order.
+func FlattenMemberTimeGroups(groups []MemberTimeGroup) []MemberTime {
+	count := 0
+	for _, g := range groups {
+		count += len(g.Members)
+	}
+	out := make([]MemberTime, 0, count)
+	for _, g := range groups {
+		out = append(out, g.Members...)
+	}
+	return out
+}
+
+func memberUTCOffset(m MemberTime, at time.Time) (int, bool) {
+	if m.TZ == "" {
+		return 0, false
+	}
+	loc, err := time.LoadLocation(m.TZ)
+	if err != nil {
+		return 0, false
+	}
+	_, offset := at.In(loc).Zone()
+	return offset, true
+}
+
+func joinMemberGroupDisplays(cfg *config.Config, groups []MemberTimeGroup, sep string) string {
+	parts := make([]string, 0, len(groups))
+	for _, g := range groups {
+		text := FormatMemberGroupDisplay(cfg, g, "")
 		if text != "" {
 			parts = append(parts, text)
 		}
@@ -86,6 +186,40 @@ func FormatMemberTime(cfg *config.Config, tz string, at time.Time) string {
 		return "—"
 	}
 	return timeformat.FormatClock(tz, cfg.Format24h, config.TimePrecision(cfg), at)
+}
+
+// FormatMemberGroupDisplay builds visible text for teammates sharing a UTC offset.
+func FormatMemberGroupDisplay(cfg *config.Config, group MemberTimeGroup, suffix string) string {
+	if len(group.Members) == 0 {
+		return ""
+	}
+	var parts []string
+	if config.ShowName(cfg) {
+		names := make([]string, 0, len(group.Members))
+		for _, m := range group.Members {
+			label := m.Label
+			if label == "" {
+				label = m.DisplayName
+			}
+			if label != "" {
+				names = append(names, label)
+			}
+		}
+		if len(names) > 0 {
+			parts = append(parts, strings.Join(names, ", "))
+		}
+	}
+	if config.ShowTime(cfg) {
+		t := group.Members[0].Time
+		if t == "" {
+			t = "—"
+		}
+		parts = append(parts, t)
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return strings.Join(parts, " - ") + suffix
 }
 
 // FormatMemberDisplay builds visible text for a member from config toggles.

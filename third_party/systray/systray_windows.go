@@ -869,7 +869,8 @@ func (item *MenuItem) parentId() uint32 {
 
 // SetIcon sets the icon of a menu item. Only works on macOS and Windows.
 // iconBytes should be the content of .ico/.jpg/.png
-func (item *MenuItem) SetIcon(iconBytes []byte) {
+func (item *MenuItem) SetIcon(iconBytes []byte, avatarContentPx int) {
+	_ = avatarContentPx
 	iconFilePath, err := iconBytesToFilePath(iconBytes)
 	if err != nil {
 		log.Errorf("Unable to write icon data to temp file: %v", err)
@@ -920,7 +921,7 @@ func addOrUpdateMenuItem(item *MenuItem) {
 // templateIconBytes and regularIconBytes should be the content of .ico for windows and
 // .ico/.jpg/.png for other platforms.
 func (item *MenuItem) SetTemplateIcon(templateIconBytes []byte, regularIconBytes []byte) {
-	item.SetIcon(regularIconBytes)
+	item.SetIcon(regularIconBytes, 0)
 }
 
 func addSeparator(id uint32) {

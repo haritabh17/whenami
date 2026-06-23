@@ -7,7 +7,7 @@ void registerSystray(void);
 int nativeLoop(void);
 
 void setIcon(const char* iconBytes, int length, bool template);
-void setMenuItemIcon(const char* iconBytes, int length, int menuId, bool template);
+void setMenuItemIcon(const char* iconBytes, int length, int menuId, bool template, int avatarSize);
 void setTitle(char* title);
 void setTooltip(char* tooltip);
 
@@ -15,6 +15,7 @@ typedef struct {
   char* text;
   char* image_bytes;
   int image_len;
+  int avatar_size;
 } status_segment_t;
 
 void setStatusSegments(status_segment_t* segments, int count);

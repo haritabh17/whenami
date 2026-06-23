@@ -18,14 +18,15 @@ const (
 )
 
 type app struct {
-	mu          sync.Mutex
-	cfg         *config.Config
-	client      team.InfoClient
-	members     []team.MemberTime
-	avatarCache map[string][]byte
-	rows        []*systray.MenuItem
-	refresh     *systray.MenuItem
-	demo        bool
+	mu             sync.Mutex
+	cfg            *config.Config
+	client         team.InfoClient
+	members        []team.MemberTime
+	rawAvatarCache map[string][]byte
+	avatarCache    map[string]avatarEntry
+	rows           []*systray.MenuItem
+	refresh        *systray.MenuItem
+	demo           bool
 }
 
 // Run starts the menu bar process (blocks until Quit).
@@ -57,10 +58,11 @@ func run(demo bool) error {
 	}
 
 	a := &app{
-		cfg:         cfg,
-		client:      client,
-		avatarCache: make(map[string][]byte),
-		demo:        demo,
+		cfg:            cfg,
+		client:         client,
+		rawAvatarCache: make(map[string][]byte),
+		avatarCache:    make(map[string]avatarEntry),
+		demo:           demo,
 	}
 	systray.Run(a.onReady, a.onExit)
 	return nil
@@ -134,7 +136,8 @@ func (a *app) refreshData() {
 		a.mu.Lock()
 		a.cfg = demoConfig()
 		a.members = demoMembers()
-		a.avatarCache = demoAvatars()
+		a.rawAvatarCache = demoAvatars()
+		a.rebuildDisplayAvatars(a.members)
 		a.mu.Unlock()
 		a.updateDisplay(false)
 		return
@@ -157,6 +160,7 @@ func (a *app) refreshData() {
 	a.mu.Lock()
 	a.members = members
 	a.refreshAvatars(members)
+	a.rebuildDisplayAvatars(members)
 	a.mu.Unlock()
 
 	a.updateDisplay(true)
@@ -164,6 +168,7 @@ func (a *app) refreshData() {
 
 func (a *app) refreshAvatars(members []team.MemberTime) {
 	if !config.ShowAvatar(a.cfg) {
+		a.rawAvatarCache = nil
 		a.avatarCache = nil
 		return
 	}
@@ -176,9 +181,21 @@ func (a *app) refreshAvatars(members []team.MemberTime) {
 			next[m.ID] = b
 			continue
 		}
-		if cached, ok := a.avatarCache[m.ID]; ok {
+		if cached, ok := a.rawAvatarCache[m.ID]; ok {
 			next[m.ID] = cached
 		}
+	}
+	a.rawAvatarCache = next
+}
+
+func (a *app) rebuildDisplayAvatars(_ []team.MemberTime) {
+	if !config.ShowAvatar(a.cfg) {
+		a.avatarCache = nil
+		return
+	}
+	next := make(map[string]avatarEntry, len(a.rawAvatarCache))
+	for id, raw := range a.rawAvatarCache {
+		next[id] = avatarEntry{data: append([]byte(nil), raw...)}
 	}
 	a.avatarCache = next
 }
@@ -200,18 +217,20 @@ func (a *app) updateDisplay(rebuildRows bool) {
 		}
 	}
 
-	title := team.FormatMenubarTitle(cfg, members)
+	title := team.FormatMenubarTitleAt(cfg, members, now)
 	systray.SetTooltip(title)
 
 	a.mu.Lock()
-	avatars := make(map[string][]byte, len(a.avatarCache))
+	avatars := make(map[string]avatarEntry, len(a.avatarCache))
 	for k, v := range a.avatarCache {
-		copied := append([]byte(nil), v...)
-		avatars[k] = copied
+		avatars[k] = avatarEntry{
+			data:        append([]byte(nil), v.data...),
+			contentSize: v.contentSize,
+		}
 	}
 	a.mu.Unlock()
 
-	setMenubarContent(cfg, members, avatars)
+	setMenubarContent(cfg, members, avatars, now)
 
 	if rebuildRows && len(a.rows) != len(members) {
 		// Team list changed; systray cannot remove items — full restart would be needed.
@@ -219,13 +238,34 @@ func (a *app) updateDisplay(rebuildRows bool) {
 
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	rows := buildMemberMenuRows(cfg, members, avatars, now)
 	for i := range a.rows {
-		if i >= len(members) {
+		if i >= len(rows) {
 			break
 		}
-		a.rows[i].SetTitle(team.FormatMenuLine(cfg, members[i]))
-		if img := team.MemberAvatar(cfg, members[i].ID, avatars); len(img) > 0 {
-			a.rows[i].SetIcon(img)
+		a.rows[i].SetTitle(rows[i].title)
+		if rows[i].hasIcon {
+			a.rows[i].SetIcon(rows[i].icon.data, rows[i].icon.contentSize)
 		}
 	}
+}
+
+type memberMenuRow struct {
+	title   string
+	icon    avatarEntry
+	hasIcon bool
+}
+
+func buildMemberMenuRows(cfg *config.Config, members []team.MemberTime, avatars map[string]avatarEntry, at time.Time) []memberMenuRow {
+	rowMembers := team.SortMemberTimesByUTCOffsetAt(members, at)
+	rows := make([]memberMenuRow, 0, len(rowMembers))
+	for _, m := range rowMembers {
+		row := memberMenuRow{title: team.FormatMenuLine(cfg, m)}
+		if entry, ok := avatars[m.ID]; ok && len(entry.data) > 0 && config.ShowAvatar(cfg) {
+			row.icon = entry
+			row.hasIcon = true
+		}
+		rows = append(rows, row)
+	}
+	return rows
 }

@@ -14,6 +14,7 @@
 #endif
 
 static NSImage* scaledIconFromData(NSData *buffer, CGFloat size, bool template);
+static NSImage* scaledAvatarIconFromData(NSData *buffer, CGFloat displaySize, int avatarPx, bool template);
 
 @interface MenuItem : NSObject
 {
@@ -107,11 +108,20 @@ withParentMenuId: (int)theParentMenuId
     NSString *text = seg[@"text"];
 
     if (imgData != nil && [imgData length] > 0) {
-      NSImage *img = scaledIconFromData(imgData, imgSize, false);
+      int avatarPx = 0;
+      if (seg[@"avatarSize"] != nil) {
+        avatarPx = [seg[@"avatarSize"] intValue];
+      }
+      NSImage *img = scaledAvatarIconFromData(imgData, imgSize, avatarPx, false);
       if (img != nil) {
         NSTextAttachment *attachment = [[NSTextAttachment alloc] init];
         attachment.image = img;
-        attachment.bounds = NSMakeRect(0, imgBaseline, imgSize, imgSize);
+        CGFloat boundH = imgSize;
+        CGFloat boundW = imgSize;
+        if (img.size.height > 0 && img.size.width > 0) {
+          boundW = boundH * (img.size.width / img.size.height);
+        }
+        attachment.bounds = NSMakeRect(0, imgBaseline, boundW, boundH);
         NSAttributedString *imgStr = [NSAttributedString attributedStringWithAttachment:attachment];
         [result appendAttributedString:imgStr];
         [result appendAttributedString:[[NSAttributedString alloc] initWithString:@" " attributes:textAttrs]];
@@ -275,6 +285,34 @@ void runInMainThread(SEL method, id object) {
                   waitUntilDone: YES];
 }
 
+static NSImage* scaledAvatarIconFromData(NSData *buffer, CGFloat displaySize, int avatarPx, bool template) {
+  if (buffer == nil || [buffer length] == 0) {
+    return nil;
+  }
+  NSImage *source = [[NSImage alloc] initWithData:buffer];
+  if (source == nil) {
+    return nil;
+  }
+  if (avatarPx <= 0) {
+    return scaledIconFromData(buffer, displaySize, template);
+  }
+
+  CGFloat scale = displaySize / (CGFloat)avatarPx;
+  NSSize srcSize = source.size;
+  CGFloat outW = srcSize.width * scale;
+  CGFloat outH = srcSize.height * scale;
+
+  NSImage *image = [[NSImage alloc] initWithSize:NSMakeSize(outW, outH)];
+  [image lockFocus];
+  [[NSGraphicsContext currentContext] setImageInterpolation:NSImageInterpolationHigh];
+  NSRect dest = NSMakeRect(0, 0, outW, outH);
+  NSRect src = NSMakeRect(0, 0, srcSize.width, srcSize.height);
+  [source drawInRect:dest fromRect:src operation:NSCompositingOperationSourceOver fraction:1.0 respectFlipped:YES hints:nil];
+  [image unlockFocus];
+  image.template = template;
+  return image;
+}
+
 static NSImage* scaledIconFromData(NSData *buffer, CGFloat size, bool template) {
   if (buffer == nil || [buffer length] == 0) {
     return nil;
@@ -305,8 +343,8 @@ void setIcon(const char* iconBytes, int length, bool template) {
   runInMainThread(@selector(setIcon:), (id)image);
 }
 
-void setMenuItemIcon(const char* iconBytes, int length, int menuId, bool template) {
-  NSImage *image = scaledIconFromBytes(iconBytes, length, 18.0, template);
+void setMenuItemIcon(const char* iconBytes, int length, int menuId, bool template, int avatarSize) {
+  NSImage *image = scaledAvatarIconFromData([NSData dataWithBytes:iconBytes length:length], 18.0, avatarSize, template);
   if (image == nil) {
     return;
   }
@@ -343,6 +381,9 @@ void setStatusSegments(status_segment_t* segments, int count) {
     }
     if (segments[i].image_len > 0 && segments[i].image_bytes != NULL) {
       d[@"image"] = [NSData dataWithBytes:segments[i].image_bytes length:segments[i].image_len];
+    }
+    if (segments[i].avatar_size > 0) {
+      d[@"avatarSize"] = @(segments[i].avatar_size);
     }
     [arr addObject:d];
   }

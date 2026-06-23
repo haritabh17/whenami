@@ -62,6 +62,14 @@ func slackErr(code, needed string) *APIError {
 	return &APIError{Code: code, Needed: needed}
 }
 
+// Presence is a Slack user presence value from users.getPresence.
+type Presence string
+
+const (
+	PresenceActive Presence = "active"
+	PresenceAway   Presence = "away"
+)
+
 // UserInfo is a subset of users.info used for team watch.
 type UserInfo struct {
 	ID          string
@@ -107,6 +115,27 @@ func (c *Client) GetUserInfo(userID string) (UserInfo, error) {
 		TZ:          resp.User.TZ,
 		AvatarURL:   resp.User.Profile.Image48,
 	}, nil
+}
+
+func (c *Client) GetUserPresence(userID string) (Presence, error) {
+	var resp struct {
+		OK       bool   `json:"ok"`
+		Presence string `json:"presence"`
+		Error    string `json:"error"`
+		Needed   string `json:"needed"`
+	}
+	if err := c.get("users.getPresence", url.Values{"user": {userID}}, &resp); err != nil {
+		return "", err
+	}
+	if !resp.OK {
+		return "", slackErr(resp.Error, resp.Needed)
+	}
+	switch Presence(resp.Presence) {
+	case PresenceActive, PresenceAway:
+		return Presence(resp.Presence), nil
+	default:
+		return "", fmt.Errorf("unknown presence %q", resp.Presence)
+	}
 }
 
 func (c *Client) AuthTest() (userID, teamID string, err error) {
