@@ -52,8 +52,9 @@ func buildGroupSegments(cfg *config.Config, group team.MemberTimeGroup, avatars 
 				continue
 			}
 			segments = append(segments, systray.StatusSegment{
-				Image:      entry.data,
-				AvatarSize: entry.contentSize,
+				Image:       entry.data,
+				AvatarSize:  entry.contentSize,
+				DisplaySize: config.IconSize(cfg),
 			})
 		}
 	}

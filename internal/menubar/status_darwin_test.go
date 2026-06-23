@@ -36,11 +36,11 @@ func TestBuildMenubarSegmentsGroupsAvatarsBeforeSharedTime(t *testing.T) {
 	if len(segments) != 6 {
 		t.Fatalf("got %d segments want 6: %#v", len(segments), segments)
 	}
-	assertImageSegment(t, segments[0], []byte("avatar-1"), 48)
-	assertImageSegment(t, segments[1], []byte("avatar-2"), 48)
+	assertImageSegment(t, segments[0], []byte("avatar-1"), 48, config.IconSize(cfg))
+	assertImageSegment(t, segments[1], []byte("avatar-2"), 48, config.IconSize(cfg))
 	assertTextSegment(t, segments[2], "10.46 AM")
 	assertTextSegment(t, segments[3], " | ")
-	assertImageSegment(t, segments[4], []byte("avatar-3"), 48)
+	assertImageSegment(t, segments[4], []byte("avatar-3"), 48, config.IconSize(cfg))
 	assertTextSegment(t, segments[5], "1.46 PM")
 }
 
@@ -79,9 +79,9 @@ func TestBuildMenubarSegmentsGroupsSameCurrentOffset(t *testing.T) {
 	if len(segments) != 4 {
 		t.Fatalf("got %d segments want 4: %#v", len(segments), segments)
 	}
-	assertImageSegment(t, segments[0], []byte("avatar-1"), 0)
-	assertImageSegment(t, segments[1], []byte("avatar-2"), 0)
-	assertImageSegment(t, segments[2], []byte("avatar-3"), 0)
+	assertImageSegment(t, segments[0], []byte("avatar-1"), 0, config.IconSize(cfg))
+	assertImageSegment(t, segments[1], []byte("avatar-2"), 0, config.IconSize(cfg))
+	assertImageSegment(t, segments[2], []byte("avatar-3"), 0, config.IconSize(cfg))
 	assertTextSegment(t, segments[3], "3.02 PM")
 }
 
@@ -103,13 +103,13 @@ func TestBuildMenubarSegmentsSortsGroupsByUTCOffset(t *testing.T) {
 	if len(segments) != 8 {
 		t.Fatalf("got %d segments want 8: %#v", len(segments), segments)
 	}
-	assertImageSegment(t, segments[0], []byte("avatar-la"), 0)
+	assertImageSegment(t, segments[0], []byte("avatar-la"), 0, config.IconSize(cfg))
 	assertTextSegment(t, segments[1], "6.02 AM")
 	assertTextSegment(t, segments[2], " | ")
-	assertImageSegment(t, segments[3], []byte("avatar-ny"), 0)
+	assertImageSegment(t, segments[3], []byte("avatar-ny"), 0, config.IconSize(cfg))
 	assertTextSegment(t, segments[4], "9.02 AM")
 	assertTextSegment(t, segments[5], " | ")
-	assertImageSegment(t, segments[6], []byte("avatar-in"), 0)
+	assertImageSegment(t, segments[6], []byte("avatar-in"), 0, config.IconSize(cfg))
 	assertTextSegment(t, segments[7], "6.32 PM")
 }
 
@@ -150,7 +150,7 @@ func TestBuildMemberMenuRowsSortsByUTCOffset(t *testing.T) {
 	}
 }
 
-func assertImageSegment(t *testing.T, got systray.StatusSegment, want []byte, wantSize int) {
+func assertImageSegment(t *testing.T, got systray.StatusSegment, want []byte, wantSize int, wantDisplaySize int) {
 	t.Helper()
 	if got.Text != "" {
 		t.Fatalf("image segment text got %q want empty", got.Text)
@@ -160,6 +160,9 @@ func assertImageSegment(t *testing.T, got systray.StatusSegment, want []byte, wa
 	}
 	if got.AvatarSize != wantSize {
 		t.Fatalf("avatar size got %d want %d", got.AvatarSize, wantSize)
+	}
+	if got.DisplaySize != wantDisplaySize {
+		t.Fatalf("display size got %d want %d", got.DisplaySize, wantDisplaySize)
 	}
 }
 
@@ -173,5 +176,8 @@ func assertTextSegment(t *testing.T, got systray.StatusSegment, want string) {
 	}
 	if got.AvatarSize != 0 {
 		t.Fatalf("text segment avatar size got %d want 0", got.AvatarSize)
+	}
+	if got.DisplaySize != 0 {
+		t.Fatalf("text segment display size got %d want 0", got.DisplaySize)
 	}
 }

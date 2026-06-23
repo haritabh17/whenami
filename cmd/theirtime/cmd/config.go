@@ -70,13 +70,15 @@ func isDisplayKey(key string) bool {
 	switch key {
 	case "show_avatar", "show_name", "show_time", "format_24h", "time_precision":
 		return true
+	case "icon_size":
+		return true
 	default:
 		return false
 	}
 }
 
 func printAll(cfg *config.Config) {
-	for _, k := range []string{"show_avatar", "show_name", "show_time", "format_24h", "time_precision"} {
+	for _, k := range []string{"show_avatar", "show_name", "show_time", "format_24h", "time_precision", "icon_size"} {
 		v, _ := getField(cfg, k)
 		fmt.Printf("%s: %s\n", k, v)
 	}
@@ -94,6 +96,8 @@ func getField(cfg *config.Config, key string) (string, bool) {
 		return fmt.Sprintf("%v", cfg.Format24h), true
 	case "time_precision":
 		return config.TimePrecision(cfg), true
+	case "icon_size":
+		return fmt.Sprintf("%d", config.IconSize(cfg)), true
 	default:
 		return "", false
 	}
@@ -130,6 +134,13 @@ func setField(cfg *config.Config, key, value string) error {
 			return fmt.Errorf("time_precision must be %q or %q", timeformat.PrecisionHours, timeformat.PrecisionMinutes)
 		}
 		cfg.TimePrecision = value
+	case "icon_size":
+		size, err := strconv.Atoi(value)
+		if err != nil {
+			return err
+		}
+		size = config.NormalizeIconSize(size)
+		cfg.IconSize = &size
 	default:
 		return fmt.Errorf("unknown key: %s", key)
 	}

@@ -26,6 +26,7 @@ type app struct {
 	avatarCache    map[string]avatarEntry
 	rows           []*systray.MenuItem
 	refresh        *systray.MenuItem
+	iconSizeLabel  *systray.MenuItem
 	demo           bool
 }
 
@@ -81,6 +82,8 @@ func (a *app) onReady() {
 	systray.AddSeparator()
 	a.rebuildMemberItems()
 	systray.AddSeparator()
+	a.addSettingsItems()
+	systray.AddSeparator()
 	quit := systray.AddMenuItem("Quit", "")
 	go func() {
 		<-quit.ClickedCh
@@ -95,6 +98,60 @@ func (a *app) onReady() {
 }
 
 func (a *app) onExit() {}
+
+func (a *app) addSettingsItems() {
+	settings := systray.AddMenuItem("Settings", "")
+	current := config.IconSize(a.cfg)
+	a.iconSizeLabel = settings.AddSubMenuItem(iconSizeTitle(current), "")
+	a.iconSizeLabel.Disable()
+
+	slider := settings.AddSubMenuItem("", "")
+	slider.SetSlider(config.IconSizeMin, config.IconSizeMax, current)
+	go func() {
+		for size := range slider.SliderCh {
+			a.setIconSize(size)
+		}
+	}()
+}
+
+func (a *app) setIconSize(size int) {
+	size = config.NormalizeIconSize(size)
+	if a.demo {
+		a.mu.Lock()
+		if a.cfg == nil {
+			a.cfg = demoConfig()
+		}
+		a.cfg.IconSize = &size
+		a.mu.Unlock()
+		a.updateIconSizeLabel(size)
+		a.updateDisplay(false)
+		return
+	}
+
+	cfg, err := config.Load()
+	if err != nil {
+		return
+	}
+	cfg.IconSize = &size
+	if err := config.Save(cfg); err != nil {
+		return
+	}
+	a.mu.Lock()
+	a.cfg = cfg
+	a.mu.Unlock()
+	a.updateIconSizeLabel(size)
+	a.updateDisplay(false)
+}
+
+func (a *app) updateIconSizeLabel(size int) {
+	if a.iconSizeLabel != nil {
+		a.iconSizeLabel.SetTitle(iconSizeTitle(size))
+	}
+}
+
+func iconSizeTitle(size int) string {
+	return fmt.Sprintf("Icon size: %d pt", size)
+}
 
 func (a *app) rebuildMemberItems() {
 	a.mu.Lock()
@@ -219,6 +276,7 @@ func (a *app) updateDisplay(rebuildRows bool) {
 
 	title := team.FormatMenubarTitleAt(cfg, members, now)
 	systray.SetTooltip(title)
+	a.updateIconSizeLabel(config.IconSize(cfg))
 
 	a.mu.Lock()
 	avatars := make(map[string]avatarEntry, len(a.avatarCache))
@@ -245,7 +303,7 @@ func (a *app) updateDisplay(rebuildRows bool) {
 		}
 		a.rows[i].SetTitle(rows[i].title)
 		if rows[i].hasIcon {
-			a.rows[i].SetIcon(rows[i].icon.data, rows[i].icon.contentSize)
+			a.rows[i].SetIconWithSize(rows[i].icon.data, rows[i].icon.contentSize, config.IconSize(cfg))
 		}
 	}
 }

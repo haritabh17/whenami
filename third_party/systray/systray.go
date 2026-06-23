@@ -33,6 +33,8 @@ func init() {
 type MenuItem struct {
 	// ClickedCh is the channel which will be notified when the menu item is clicked
 	ClickedCh chan struct{}
+	// SliderCh is notified when a custom slider menu item changes value.
+	SliderCh chan int
 
 	// id uniquely identify a menu item, not supposed to be modified
 	id uint32
@@ -61,6 +63,7 @@ func (item *MenuItem) String() string {
 func newMenuItem(title string, tooltip string, parent *MenuItem) *MenuItem {
 	return &MenuItem{
 		ClickedCh:   make(chan struct{}),
+		SliderCh:    make(chan int),
 		id:          atomic.AddUint32(&currentID, 1),
 		title:       title,
 		tooltip:     tooltip,
@@ -68,6 +71,20 @@ func newMenuItem(title string, tooltip string, parent *MenuItem) *MenuItem {
 		checked:     false,
 		isCheckable: false,
 		parent:      parent,
+	}
+}
+
+func systrayMenuItemSliderChanged(id uint32, value int) {
+	menuItemsLock.RLock()
+	item, ok := menuItems[id]
+	menuItemsLock.RUnlock()
+	if !ok {
+		log.Errorf("No menu item with ID %v", id)
+		return
+	}
+	select {
+	case item.SliderCh <- value:
+	default:
 	}
 }
 

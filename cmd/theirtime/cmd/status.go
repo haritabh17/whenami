@@ -32,6 +32,7 @@ var statusCmd = &cobra.Command{
 		fmt.Printf("Show time:       %v\n", config.ShowTime(cfg))
 		fmt.Printf("24-hour:         %v\n", cfg.Format24h)
 		fmt.Printf("Time precision:  %s\n", config.TimePrecision(cfg))
+		fmt.Printf("Icon size:       %dpt\n", config.IconSize(cfg))
 		if !hasToken {
 			fmt.Println("\nNot onboarded. Run: theirtime onboard")
 		}

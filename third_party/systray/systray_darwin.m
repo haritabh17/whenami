@@ -1,4 +1,5 @@
 #import <Cocoa/Cocoa.h>
+#include <math.h>
 #include "systray.h"
 
 #if __MAC_OS_X_VERSION_MIN_REQUIRED < 101400
@@ -15,6 +16,9 @@
 
 static NSImage* scaledIconFromData(NSData *buffer, CGFloat size, bool template);
 static NSImage* scaledAvatarIconFromData(NSData *buffer, CGFloat displaySize, int avatarPx, bool template);
+
+static const NSInteger avatarMenuImageTag = 1001;
+static const NSInteger avatarMenuTextTag = 1002;
 
 @interface MenuItem : NSObject
 {
@@ -55,6 +59,7 @@ withParentMenuId: (int)theParentMenuId
 
 @interface AppDelegate: NSObject <NSApplicationDelegate>
   - (void) add_or_update_menu_item:(MenuItem*) item;
+  - (void) refreshAvatarMenuItemView:(NSMenuItem*) menuItem;
   - (IBAction)menuHandler:(id)sender;
   @property (assign) IBOutlet NSWindow *window;
   @end
@@ -100,8 +105,7 @@ withParentMenuId: (int)theParentMenuId
   }
   NSMutableAttributedString *result = [[NSMutableAttributedString alloc] init];
   NSDictionary *textAttrs = @{NSFontAttributeName: font};
-  const CGFloat imgSize = 16.0;
-  const CGFloat imgBaseline = round((font.capHeight - imgSize) / 2.0);
+  const CGFloat defaultImgSize = 30.0;
 
   for (NSDictionary *seg in segments) {
     NSData *imgData = seg[@"image"];
@@ -112,6 +116,11 @@ withParentMenuId: (int)theParentMenuId
       if (seg[@"avatarSize"] != nil) {
         avatarPx = [seg[@"avatarSize"] intValue];
       }
+      CGFloat imgSize = defaultImgSize;
+      if (seg[@"displaySize"] != nil && [seg[@"displaySize"] intValue] > 0) {
+        imgSize = (CGFloat)[seg[@"displaySize"] intValue];
+      }
+      CGFloat imgBaseline = round((font.capHeight - imgSize) / 2.0);
       NSImage *img = scaledAvatarIconFromData(imgData, imgSize, avatarPx, false);
       if (img != nil) {
         NSTextAttachment *attachment = [[NSTextAttachment alloc] init];
@@ -162,6 +171,12 @@ withParentMenuId: (int)theParentMenuId
   systray_menu_item_selected(menuId.intValue);
 }
 
+- (IBAction)sliderHandler:(id)sender
+{
+  NSSlider *slider = (NSSlider *)sender;
+  systray_menu_item_slider_changed((int)slider.tag, (int)lround(slider.doubleValue));
+}
+
 - (void)add_or_update_menu_item:(MenuItem *)item {
   NSMenu *theMenu = self->menu;
   NSMenuItem *parentItem;
@@ -198,6 +213,99 @@ withParentMenuId: (int)theParentMenuId
   } else {
     menuItem.state = NSControlStateValueOff;
   }
+  [self refreshAvatarMenuItemView:menuItem];
+}
+
+- (void) refreshAvatarMenuItemView:(NSMenuItem*) menuItem {
+  NSView *view = menuItem.view;
+  NSImageView *imageView = [view viewWithTag:avatarMenuImageTag];
+  if (imageView == nil || imageView.image == nil) {
+    return;
+  }
+  [self setAvatarMenuItemView:menuItem image:imageView.image displaySize:imageView.frame.size.height];
+}
+
+- (void) setAvatarMenuItemView:(NSMenuItem*) menuItem image:(NSImage*) image displaySize:(CGFloat)displaySize {
+  if (displaySize <= 0) {
+    displaySize = 18.0;
+  }
+
+  NSFont *font = [NSFont menuFontOfSize:0];
+  if (font == nil) {
+    font = [NSFont systemFontOfSize:13];
+  }
+
+  NSView *view = menuItem.view;
+  NSImageView *imageView = [view viewWithTag:avatarMenuImageTag];
+  NSTextField *textField = [view viewWithTag:avatarMenuTextTag];
+  if (imageView == nil || textField == nil) {
+    view = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 1, 1)];
+
+    imageView = [[NSImageView alloc] initWithFrame:NSZeroRect];
+    imageView.tag = avatarMenuImageTag;
+    imageView.imageScaling = NSImageScaleProportionallyUpOrDown;
+    [view addSubview:imageView];
+
+    textField = [[NSTextField alloc] initWithFrame:NSZeroRect];
+    textField.tag = avatarMenuTextTag;
+    textField.editable = NO;
+    textField.selectable = NO;
+    textField.bezeled = NO;
+    textField.drawsBackground = NO;
+    [view addSubview:textField];
+  }
+
+  NSString *title = menuItem.title != nil ? menuItem.title : @"";
+  CGFloat imageW = displaySize;
+  if (image.size.height > 0 && image.size.width > 0) {
+    imageW = displaySize * (image.size.width / image.size.height);
+  }
+  CGFloat textH = ceil(font.ascender - font.descender + font.leading);
+  CGFloat textW = ceil([title sizeWithAttributes:@{NSFontAttributeName: font}].width);
+  CGFloat height = ceil(MAX(24.0, MAX(displaySize + 6.0, textH + 8.0)));
+  CGFloat imageX = 12.0;
+  CGFloat textX = imageX + imageW + 8.0;
+  CGFloat width = ceil(textX + textW + 24.0);
+
+  view.frame = NSMakeRect(0, 0, width, height);
+  imageView.frame = NSMakeRect(imageX, round((height - displaySize) / 2.0), imageW, displaySize);
+  imageView.image = image;
+
+  textField.font = font;
+  textField.stringValue = title;
+  textField.textColor = menuItem.enabled ? [NSColor textColor] : [NSColor disabledControlTextColor];
+  textField.frame = NSMakeRect(textX, round((height - textH) / 2.0), textW + 4.0, textH);
+
+  menuItem.view = view;
+  [view setNeedsDisplay:YES];
+  [imageView setNeedsDisplay:YES];
+  [textField setNeedsDisplay:YES];
+  [menuItem.menu update];
+}
+
+- (void) setMenuItemSlider:(NSArray*)sliderConfig {
+  NSNumber* menuId = [sliderConfig objectAtIndex:0];
+  NSNumber* minValue = [sliderConfig objectAtIndex:1];
+  NSNumber* maxValue = [sliderConfig objectAtIndex:2];
+  NSNumber* value = [sliderConfig objectAtIndex:3];
+
+  NSMenuItem* menuItem = find_menu_item(menu, menuId);
+  if (menuItem == NULL) {
+    return;
+  }
+
+  NSSlider *slider = [[NSSlider alloc] initWithFrame:NSMakeRect(12, 0, 180, 24)];
+  slider.minValue = minValue.doubleValue;
+  slider.maxValue = maxValue.doubleValue;
+  slider.doubleValue = value.doubleValue;
+  slider.continuous = YES;
+  slider.target = self;
+  slider.action = @selector(sliderHandler:);
+  slider.tag = menuId.integerValue;
+
+  NSView *view = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 204, 24)];
+  [view addSubview:slider];
+  menuItem.view = view;
 }
 
 NSMenuItem *find_menu_item(NSMenu *ourMenu, NSNumber *menuId) {
@@ -236,13 +344,24 @@ NSMenuItem *find_menu_item(NSMenu *ourMenu, NSNumber *menuId) {
 - (void) setMenuItemIcon:(NSArray*)imageAndMenuId {
   NSImage* image = [imageAndMenuId objectAtIndex:0];
   NSNumber* menuId = [imageAndMenuId objectAtIndex:1];
+  CGFloat displaySize = 0;
+  if ([imageAndMenuId count] > 2) {
+    displaySize = [[imageAndMenuId objectAtIndex:2] doubleValue];
+  }
 
   NSMenuItem* menuItem;
   menuItem = find_menu_item(menu, menuId);
   if (menuItem == NULL) {
     return;
   }
+  if (displaySize > 0) {
+    [self setAvatarMenuItemView:menuItem image:image displaySize:displaySize];
+    return;
+  }
+  image.cacheMode = NSImageCacheNever;
+  menuItem.image = nil;
   menuItem.image = image;
+  [menuItem.menu update];
 }
 
 - (void) show_menu_item:(NSNumber*) menuId
@@ -309,6 +428,7 @@ static NSImage* scaledAvatarIconFromData(NSData *buffer, CGFloat displaySize, in
   NSRect src = NSMakeRect(0, 0, srcSize.width, srcSize.height);
   [source drawInRect:dest fromRect:src operation:NSCompositingOperationSourceOver fraction:1.0 respectFlipped:YES hints:nil];
   [image unlockFocus];
+  image.cacheMode = NSImageCacheNever;
   image.template = template;
   return image;
 }
@@ -327,6 +447,7 @@ static NSImage* scaledIconFromData(NSData *buffer, CGFloat size, bool template) 
   NSRect dest = NSMakeRect(0, 0, size, size);
   [source drawInRect:dest fromRect:NSZeroRect operation:NSCompositingOperationSourceOver fraction:1.0 respectFlipped:YES hints:nil];
   [image unlockFocus];
+  image.cacheMode = NSImageCacheNever;
   image.template = template;
   return image;
 }
@@ -343,13 +464,23 @@ void setIcon(const char* iconBytes, int length, bool template) {
   runInMainThread(@selector(setIcon:), (id)image);
 }
 
-void setMenuItemIcon(const char* iconBytes, int length, int menuId, bool template, int avatarSize) {
-  NSImage *image = scaledAvatarIconFromData([NSData dataWithBytes:iconBytes length:length], 18.0, avatarSize, template);
+void setMenuItemIcon(const char* iconBytes, int length, int menuId, bool template, int avatarSize, int displaySize) {
+  CGFloat imgSize = displaySize > 0 ? (CGFloat)displaySize : 18.0;
+  NSImage *image = scaledAvatarIconFromData([NSData dataWithBytes:iconBytes length:length], imgSize, avatarSize, template);
   if (image == nil) {
     return;
   }
   NSNumber *mId = [NSNumber numberWithInt:menuId];
-  runInMainThread(@selector(setMenuItemIcon:), @[image, (id)mId]);
+  NSNumber *display = [NSNumber numberWithInt:displaySize];
+  runInMainThread(@selector(setMenuItemIcon:), @[image, (id)mId, display]);
+}
+
+void set_menu_item_slider(int menuId, int minValue, int maxValue, int value) {
+  NSNumber *mId = [NSNumber numberWithInt:menuId];
+  NSNumber *min = [NSNumber numberWithInt:minValue];
+  NSNumber *max = [NSNumber numberWithInt:maxValue];
+  NSNumber *current = [NSNumber numberWithInt:value];
+  runInMainThread(@selector(setMenuItemSlider:), @[mId, min, max, current]);
 }
 
 void setTitle(char* ctitle) {
@@ -384,6 +515,9 @@ void setStatusSegments(status_segment_t* segments, int count) {
     }
     if (segments[i].avatar_size > 0) {
       d[@"avatarSize"] = @(segments[i].avatar_size);
+    }
+    if (segments[i].display_size > 0) {
+      d[@"displaySize"] = @(segments[i].display_size);
     }
     [arr addObject:d];
   }

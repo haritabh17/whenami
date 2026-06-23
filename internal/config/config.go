@@ -11,8 +11,11 @@ import (
 )
 
 const (
-	DirName  = "theirtime"
-	FileName = "config.yaml"
+	DirName         = "theirtime"
+	FileName        = "config.yaml"
+	IconSizeDefault = 30
+	IconSizeMin     = 18
+	IconSizeMax     = 54
 )
 
 var fileMu sync.Mutex
@@ -24,6 +27,7 @@ type Config struct {
 	ShowAvatar    *bool        `yaml:"show_avatar,omitempty"`
 	ShowName      *bool        `yaml:"show_name,omitempty"`
 	ShowTime      *bool        `yaml:"show_time,omitempty"`
+	IconSize      *int         `yaml:"icon_size,omitempty"`
 	TimePrecision string       `yaml:"time_precision,omitempty"` // hours | minutes
 	Team          []TeamMember `yaml:"team,omitempty"`
 }
@@ -59,6 +63,23 @@ func TimePrecision(c *Config) string {
 	return timeformat.PrecisionMinutes
 }
 
+func IconSize(c *Config) int {
+	if c == nil || c.IconSize == nil {
+		return IconSizeDefault
+	}
+	return NormalizeIconSize(*c.IconSize)
+}
+
+func NormalizeIconSize(size int) int {
+	if size < IconSizeMin {
+		return IconSizeMin
+	}
+	if size > IconSizeMax {
+		return IconSizeMax
+	}
+	return size
+}
+
 // ValidateDisplay ensures at least one visibility toggle is enabled.
 func ValidateDisplay(c *Config) error {
 	if !ShowAvatar(c) && !ShowName(c) && !ShowTime(c) {
@@ -82,6 +103,13 @@ func ApplyDefaults(c *Config) {
 	if c.ShowTime == nil {
 		t := true
 		c.ShowTime = &t
+	}
+	if c.IconSize == nil {
+		size := IconSizeDefault
+		c.IconSize = &size
+	} else {
+		size := NormalizeIconSize(*c.IconSize)
+		c.IconSize = &size
 	}
 	if c.TimePrecision == "" {
 		c.TimePrecision = timeformat.PrecisionMinutes

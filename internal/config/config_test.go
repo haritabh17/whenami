@@ -11,6 +11,9 @@ func TestDisplayDefaults(t *testing.T) {
 	if TimePrecision(c) != "minutes" {
 		t.Fatalf("precision %q", TimePrecision(c))
 	}
+	if IconSize(c) != IconSizeDefault {
+		t.Fatalf("icon size %d", IconSize(c))
+	}
 }
 
 func TestValidateDisplayRejectsAllHidden(t *testing.T) {
@@ -27,5 +30,21 @@ func TestTimePrecisionHours(t *testing.T) {
 	ApplyDefaults(c)
 	if TimePrecision(c) != "hours" {
 		t.Fatalf("got %q", TimePrecision(c))
+	}
+}
+
+func TestIconSizeClampedToSupportedRange(t *testing.T) {
+	small := 1
+	c := &Config{IconSize: &small}
+	ApplyDefaults(c)
+	if IconSize(c) != IconSizeMin {
+		t.Fatalf("small icon size got %d want %d", IconSize(c), IconSizeMin)
+	}
+
+	large := 99
+	c = &Config{IconSize: &large}
+	ApplyDefaults(c)
+	if IconSize(c) != IconSizeMax {
+		t.Fatalf("large icon size got %d want %d", IconSize(c), IconSizeMax)
 	}
 }
